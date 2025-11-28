@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OSIS-MPK — Progres Pembayaran Siswa</title>
+  <style>
+:root{
+  --green:#2ecc71; /* lunas */
+  --yellow:#f1c40f; /* menyicil */
+  --gray:#bdbdbd; /* belum */
+  --bg:#fffef7; /* lembut */
+  --card:#ffffff;
+  --muted:#374139;
+  --glass: rgba(255,255,255,0.7);
+  --radius:12px;
+  --shadow: 0 8px 28px rgba(21,40,20,0.06);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;background:linear-gradient(180deg,#fbfcec 0%,var(--bg) 100%);color:var(--muted);-webkit-font-smoothing:antialiased}
+.wrap{max-width:1040px;margin:28px auto;padding:20px}
+
+/* Header - keep original layout (left title, right toolbar) */
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+header h1{margin:0;font-size:20px;color:#25502a}
+p.lead{margin:6px 0 0;font-size:13px;color:#3a5a36}
+
+/* Cards and layout */
+.card{background:var(--card);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
+.layout{display:grid;grid-template-columns:360px 1fr;gap:18px;margin-top:18px}
+
+/* Donut container (use conic-gradient) */
+.donut-wrap{display:flex;flex-direction:column;align-items:center;gap:12px}
+.donut{width:240px;height:240px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;transition:all 500ms cubic-bezier(.2,.9,.3,1);background:conic-gradient(var(--gray) 0deg 360deg)}
+.donut::after{content:'';position:absolute;width:120px;height:120px;border-radius:50%;background:var(--card);box-shadow:0 6px 18px rgba(0,0,0,0.04);}
+.center{position:absolute;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.center .big{font-size:22px;font-weight:700;color:#214a2a}
+.center .small{font-size:13px;color:#61725a}
+.legend{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+.legend .row{display:flex;align-items:center;gap:8px}
+.swatch{width:12px;height:12px;border-radius:3px}
+
+/* Classes list */
+.classes{display:flex;flex-direction:column;gap:10px;margin-top:12px}
+.cls{display:flex;align-items:center;justify-content:space-between;padding:10px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.95),rgba(250,250,250,0.95));}
+.cls .left{display:flex;align-items:center;gap:12px}
+.progress-mini{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative}
+.progress-mini .inner{position:absolute;width:36px;height:36px;border-radius:50%;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:11px}
+.cls .meta{min-width:180px}
+.cls .meta small{display:block;color:#6b6b6b}
+
+/* Buttons & inputs */
+.toolbar{display:flex;gap:8px;align-items:center}
+button{cursor:pointer;background:#2b6f3a;color:#fff;border:0;padding:8px 12px;border-radius:10px;font-weight:600}
+button.ghost{background:transparent;color:#2b6f3a;border:1px solid rgba(43,111,58,0.12)}
+input[type=number]{width:80px;padding:6px;border-radius:8px;border:1px solid #e6e6e6}
+
+/* Admin area - hide by default */
+.admin{display:none}
+.admin.active{display:block}
+.login-modal{position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center}
+.login-box{background:var(--card);padding:18px;border-radius:12px;width:360px}
+label{font-size:13px;color:#2f4a33}
+textarea{width:100%;min-height:120px;padding:8px;border-radius:8px;border:1px solid #e9e9e9}
+.muted{font-size:12px;color:#6b6b6b}
+.small-btn{padding:6px 8px;border-radius:8px;font-size:13px}
+
+footer{margin-top:18px;color:#5b5b5b;font-size:13px}
+
+/* Responsive adjustments */
+@media (max-width:880px){
+  .layout{grid-template-columns:1fr}
+  .donut{width:200px;height:200px}
+  .donut::after{width:100px;height:100px}
+  .wrap{padding:12px}
+}
+.guest-photo{position:absolute;width:110px;height:110px;border-radius:50%;object-fit:cover;border:4px solid var(--card);box-shadow:0 8px 24px rgba(0,0,0,0.14);}
+@media (max-width:880px){.guest-photo{width:90px;height:90px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>OSIS-MPK — Progres Pembayaran Event</h1>
+      <p class="lead">Lihat ringkasan pembayaran per kelas. Halaman admin khusus untuk panitia (dilindungi password).</p>
+    </div>
+    <div class="toolbar">
+      <button id="open-admin">Masuk Halaman Panitia</button>
+      <button class="ghost" id="export-json">Export JSON</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="card">
+      <div class="donut-wrap">
+        <div id="donut" class="donut" aria-hidden="true">
+          <img id="guest-img" class="guest-photo" src="" alt="Guest Star" style="display:none" />
+        </div>
+        <div class="center" style="position:relative;top:-120px">
+          <div class="big" id="percent-paid">0%</div>
+          <div class="small">Lunas + Menyicil</div>
+        </div>
+        <div class="legend" style="margin-top:110px">
+          <div class="row"><div class="swatch" style="background:var(--green)"></div><div>Lunas (<span id="total-lunas">0</span>)</div></div>
+          <div class="row"><div class="swatch" style="background:var(--yellow)"></div><div>Menyicil (<span id="total-menyicil">0</span>)</div></div>
+          <div class="row"><div class="swatch" style="background:var(--gray)"></div><div>Belum (<span id="total-belum">0</span>)</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin:0 0 12px 0;color:#345a2f">Rincian Per Kelas</h3>
+      <div id="classes" class="classes"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center;justify-content:flex-end">
+        <button class="ghost" id="import-sample">Isi Contoh</button>
+        <button id="reset-data">Reset Data</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="admin card" id="admin-area" style="margin-top:18px">
+    <h3 style="margin-top:0;color:#2f4a33">Halaman Panitia — Edit Data Kelas</h3>
+    <p class="muted">Untuk entri cepat: gunakan format CSV (satu baris per kelas): <code>NamaKelas,lunas,menyicil,belum</code></p>
+    <textarea id="bulk-input" placeholder="Contoh: X IPA 1,12,3,10\nXI IPS 2,10,0,15"></textarea>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button id="bulk-apply">Terapkan Import CSV</button>
+      <button class="ghost" id="close-admin">Tutup Halaman Panitia</button>
+    </div>
+    <hr style="margin:12px 0">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <strong>Daftar Kelas (klik untuk edit)</strong>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="ghost" id="add-class">Tambah Kelas</button>
+        <button id="save-to-storage">Simpan Perubahan</button>
+      </div>
+    </div>
+    <div id="admin-classes" style="margin-top:10px"></div>
+    <hr style="margin:12px 0">
+    <h4 style="margin:0 0 8px 0">Ubah Password Akses</h4>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="new-pw" placeholder="Password baru" />
+      <button id="change-pw" class="small-btn">Ubah</button>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:13px;color:var(--muted);margin-right:6px">Foto Guest Star:</label>
+      <input id="guest-upload" type="file" accept="image/*" />
+      <button id="guest-remove" class="ghost small-btn">Hapus Foto</button>
+      <small class="muted" style="margin-left:6px">(Foto akan disimpan di browser panitia)</small>
+    </div>
+    <p class="muted" style="margin-top:8px">Catatan: proteksi dengan password ini **bersifat client-side** (disimpan pada browser). Jangan gunakan password penting.</p>
+  </div>
+
+  <footer>
+    <small>Petunjuk singkat: Panitia -> klik "Masuk Halaman Panitia" -> masukkan password -> gunakan import CSV atau edit per kelas -> klik "Simpan Perubahan". Data disimpan pada browser (localStorage).</small>
+  </footer>
+</div>
+
+<!-- Login modal (hidden by default) -->
+<div id="login-modal" class="login-modal" style="display:none">
+  <div class="login-box card">
+    <label for="pw">Masukkan Password Panitia</label>
+    <input id="pw" type="password" style="width:100%;padding:8px;margin-top:8px;border-radius:8px;border:1px solid #eee" />
+    <div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">
+      <button id="try-login">Masuk</button>
+      <button class="ghost" id="cancel-login">Batal</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// --- Data model and persistence ---
+const STORAGE_KEY = 'osismpk_classes_v1';
+const PW_KEY = 'osismpk_admin_pw_v1';
+
+// default data (empty)
+const defaultData = [];
+
+// helper: load & save
+function loadData(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return [...defaultData];
+    return JSON.parse(raw);
+  }catch(e){console.error(e);return [...defaultData];}
+}
+function saveData(arr){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+// default password (only when none exists) - WARNING: client-side only
+const DEFAULT_PLAIN_PW = 'osismpk123';
+async function ensureDefaultPw(){
+  if(!localStorage.getItem(PW_KEY)){
+    const h = await hashPw(DEFAULT_PLAIN_PW);
+    localStorage.setItem(PW_KEY,h);
+  }
+}
+
+// Hash function (SHA-256 -> hex)
+async function hashPw(pw){
+  const enc = new TextEncoder();
+  const data = enc.encode(pw);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+
+// --- Rendering donut using conic-gradient ---
+function renderDonut(totals){
+  const donut = document.getElementById('donut');
+  const totalAll = totals.lunas + totals.menyicil + totals.belum;
+  const pctLunas = totalAll? (totals.lunas/totalAll) : 0;
+  const pctMeny = totalAll? (totals.menyicil/totalAll) : 0;
+  const pctBel = totalAll? (totals.belum/totalAll) : 0;
+
+  const degL = pctLunas*360;
+  const degM = pctMeny*360;
+  const degB = pctBel*360;
+  const stop1 = degL;
+  const stop2 = degL + degM;
+  donut.style.background = `conic-gradient(var(--green) 0deg ${stop1}deg, var(--yellow) ${stop1}deg ${stop2}deg, var(--gray) ${stop2}deg 360deg)`;
+  // make donut look like ring by creating inner circle via box-shadow trick
+  donut.style.boxShadow = 'inset 0 0 0 48px rgba(255,255,255,1)';
+
+  // update center text
+  const paidPlusMeny = totals.lunas + totals.menyicil;
+  const percentPaid = totalAll? Math.round((paidPlusMeny/totalAll)*100) : 0;
+  document.getElementById('percent-paid').textContent = percentPaid + '%';
+  document.getElementById('total-lunas').textContent = totals.lunas;
+  document.getElementById('total-menyicil').textContent = totals.menyicil;
+  document.getElementById('total-belum').textContent = totals.belum;
+}
+
+function computeTotals(classes){
+  let lunas=0, menyicil=0, belum=0;
+  for(const c of classes){
+    // ensure numeric
+    lunas += Number(c.lunas)||0;
+    menyicil += Number(c.menyicil)||0;
+    belum += Number(c.belum)||0;
+  }
+  return {lunas,menyicil,belum};
+}
+
+// --- Render classes list ---
+function renderClasses(classes){
+  const container = document.getElementById('classes');
+  container.innerHTML='';
+  classes.forEach((c,idx)=>{
+    const total = (Number(c.lunas)||0) + (Number(c.menyicil)||0) + (Number(c.belum)||0);
+    const pctPaid = total? Math.round(((Number(c.lunas)||0) + (Number(c.menyicil)||0))/total*100):0;
+    const div = document.createElement('div');
+    div.className='cls';
+    div.innerHTML = `
+      <div class="left">
+        <div class="progress-mini" data-idx="${idx}"></div>
+        <div class="meta">
+          <strong>${escapeHtml(c.name)}</strong>
+          <small>${(Number(total)||0)} siswa — ${pctPaid}% lunas+menyicil</small>
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div><small>Lunas: ${c.lunas||0}</small></div>
+        <div><small>Menyicil: ${c.menyicil||0}</small></div>
+        <div><small>Belum: ${c.belum||0}</small></div>
+      </div>
+    `;
+    div.addEventListener('click',()=>openEditDialog(idx));
+    container.appendChild(div);
+
+    // draw small donut using conic-gradient on .progress-mini
+    const prog = div.querySelector('.progress-mini');
+    const a = Number(c.lunas)||0;
+    const b = Number(c.menyicil)||0;
+    const d = Number(c.belum)||0;
+    const t = a+b+d || 1;
+    const stop1 = (a/t)*360;
+    const stop2 = ((a+b)/t)*360;
+    prog.style.background = `conic-gradient(var(--green) 0deg ${stop1}deg, var(--yellow) ${stop1}deg ${stop2}deg, var(--gray) ${stop2}deg 360deg)`;
+    prog.style.boxShadow = 'inset 0 0 0 18px rgba(255,255,255,1)';
+    const inner = document.createElement('div'); inner.className='inner'; inner.textContent = pctPaid + '%';
+    prog.appendChild(inner);
+  });
+}
+
+function escapeHtml(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// --- Admin interactions ---
+let classes = loadData();
+
+function refreshAll(){
+  classes = loadData();
+  renderClasses(classes);
+  const totals = computeTotals(classes);
+  renderDonut(totals);
+  renderAdminList();
+}
+
+function renderAdminList(){
+  const area = document.getElementById('admin-classes');
+  area.innerHTML='';
+  classes.forEach((c,idx)=>{
+    const row = document.createElement('div');
+    row.style.display='flex'; row.style.gap='8px'; row.style.alignItems='center'; row.style.marginBottom='8px';
+    row.innerHTML = `
+      <input data-idx="${idx}" class="a-name" value="${escapeHtml(c.name)}" style="flex:1;padding:6px;border-radius:8px;border:1px solid #eee" />
+      <input data-idx="${idx}" class="a-lunas" type="number" min="0" value="${c.lunas||0}" style="width:80px" />
+      <input data-idx="${idx}" class="a-meny" type="number" min="0" value="${c.menyicil||0}" style="width:80px" />
+      <input data-idx="${idx}" class="a-bel" type="number" min="0" value="${c.belum||0}" style="width:80px" />
+      <button class="ghost small-btn" data-idx="${idx}">Hapus</button>
+    `;
+    area.appendChild(row);
+    row.querySelector('button').addEventListener('click',()=>{ classes.splice(idx,1); renderAdminList(); saveData(classes); refreshAll(); });
+  });
+}
+
+function openEditDialog(idx){
+  // open admin area and focus the item for quick editing
+  document.getElementById('admin-area').classList.add('active');
+  window.scrollTo({top:document.getElementById('admin-area').offsetTop-20,behavior:'smooth'});
+  // no modal - direct inline editing below
+}
+
+// bulk import CSV
+function applyBulkCSV(text){
+  const lines = text.split('\n').map(l=>l.trim()).filter(l=>l);
+  const out = [];
+  for(const ln of lines){
+    const parts = ln.split(',').map(p=>p.trim());
+    if(parts.length<4) continue;
+    out.push({name:parts[0],lunas: Number(parts[1])||0, menyicil: Number(parts[2])||0, belum: Number(parts[3])||0});
+  }
+  if(out.length) classes = out;
+  saveData(classes);
+  refreshAll();
+}
+
+// --- Wire up UI ---
+const GUEST_KEY = 'osismpk_guest_img_v1';
+
+function loadGuestImage(){
+  const data = localStorage.getItem(GUEST_KEY);
+  const img = document.getElementById('guest-img');
+  if(!img) return;
+  if(data){ img.src = data; img.style.display = 'block'; }
+  else { img.src = ''; img.style.display = 'none'; }
+}
+
+function saveGuestImage(dataUrl){ localStorage.setItem(GUEST_KEY, dataUrl); loadGuestImage(); }
+
+function removeGuestImage(){ localStorage.removeItem(GUEST_KEY); loadGuestImage(); alert('Foto guest star dihapus.'); }
+
+(async function main(){
+  await ensureDefaultPw();
+  loadGuestImage();
+  refreshAll();
+
+  document.getElementById('guest-upload').addEventListener('change',(e)=>{
+    const f = e.target.files && e.target.files[0];
+    if(!f) return;
+    const reader = new FileReader();
+    reader.onload = function(ev){ saveGuestImage(ev.target.result); alert('Foto guest star tersimpan.'); };
+    reader.readAsDataURL(f);
+  });
+
+  document.getElementById('guest-remove').addEventListener('click',()=>{
+    if(!confirm('Hapus foto guest star dari tampilan?')) return; removeGuestImage();
+  });
+
+  document.getElementById('import-sample').addEventListener('click',()=>{
+    const sample = [
+      {name:'X IPA 1',lunas:12,menyicil:3,belum:10},
+      {name:'X IPA 2',lunas:8,menyicil:2,belum:15},
+      {name:'XI IPS 1',lunas:10,menyicil:0,belum:12}
+    ];
+    classes = sample; saveData(classes); refreshAll();
+  });
+
+  document.getElementById('reset-data').addEventListener('click',()=>{
+    if(!confirm('Reset semua data kelas?')) return;
+    classes = [];
+    saveData(classes);
+    refreshAll();
+  });
+
+  document.getElementById('open-admin').addEventListener('click',()=>{
+    document.getElementById('login-modal').style.display='flex';
+    document.getElementById('pw').value='';
+    document.getElementById('pw').focus();
+  });
+  document.getElementById('cancel-login').addEventListener('click',()=>{document.getElementById('login-modal').style.display='none'});
+
+  document.getElementById('try-login').addEventListener('click',async()=>{
+    const val = document.getElementById('pw').value||'';
+    const h = await hashPw(val);
+    const stored = localStorage.getItem(PW_KEY)||'';
+    if(h===stored){
+      document.getElementById('login-modal').style.display='none';
+      document.getElementById('admin-area').classList.add('active');
+      document.getElementById('bulk-input').value='';
+      window.scrollTo({top:document.getElementById('admin-area').offsetTop-20,behavior:'smooth'});
+    }else{
+      alert('Password salah. Pastikan panitia memasukkan password yang benar.');
+    }
+  });
+
+  document.getElementById('close-admin').addEventListener('click',()=>{document.getElementById('admin-area').classList.remove('active')});
+
+  document.getElementById('bulk-apply').addEventListener('click',()=>{
+    const txt = document.getElementById('bulk-input').value||'';
+    if(!txt.trim()){alert('Masukkan CSV di textarea.');return}
+    applyBulkCSV(txt);
+    document.getElementById('bulk-input').value='';
+    alert('Import selesai. Jangan lupa klik "Simpan Perubahan" jika ingin mempertahankan perubahan.');
+  });
+
+  document.getElementById('add-class').addEventListener('click',()=>{
+    classes.push({name:'Nama Kelas',lunas:0,menyicil:0,belum:0});
+    renderAdminList();
+  });
+
+  document.getElementById('save-to-storage').addEventListener('click',()=>{
+    // gather values from admin inputs
+    const area = document.getElementById('admin-classes');
+    const names = area.querySelectorAll('.a-name');
+    const lun = area.querySelectorAll('.a-lunas');
+    const men = area.querySelectorAll('.a-meny');
+    const bel = area.querySelectorAll('.a-bel');
+    const next = [];
+    for(let i=0;i<names.length;i++){
+      next.push({
+        name: names[i].value||('Kelas '+(i+1)),
+        lunas: Number(lun[i].value)||0,
+        menyicil: Number(men[i].value)||0,
+        belum: Number(bel[i].value)||0
+      });
+    }
+    classes = next;
+    saveData(classes);
+    refreshAll();
+    alert('Perubahan disimpan.');
+  });
+
+  document.getElementById('change-pw').addEventListener('click',async()=>{
+    const np = document.getElementById('new-pw').value||'';
+    if(!np){alert('Masukkan password baru');return}
+    const h = await hashPw(np);
+    localStorage.setItem(PW_KEY,h);
+    document.getElementById('new-pw').value='';
+    alert('Password telah diubah. Ingat bahwa ini hanya tersimpan di browser.');
+  });
+
+  // export json
+  document.getElementById('export-json').addEventListener('click',()=>{
+    const data = JSON.stringify(classes,null,2);
+    const blob = new Blob([data],{type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='osismpk_pembayaran.json'; a.click(); URL.revokeObjectURL(url);
+  });
+
+})();
+</script>
+</body>
+</html>
